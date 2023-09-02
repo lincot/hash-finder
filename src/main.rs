@@ -19,7 +19,7 @@ fn main() {
     let args = Args::parse();
     let (sender, receiver) = channel::<(u64, String)>();
     thread::spawn(move || {
-        send_hashes(sender, args.trailing_zeros, num_cpus::get());
+        send_hashes(sender, 1, args.trailing_zeros, num_cpus::get());
     });
 
     for (n, hash) in receiver.iter().take(args.num_numbers) {

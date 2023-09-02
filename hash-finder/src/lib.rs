@@ -60,7 +60,12 @@ fn run_threads<F: Fn(usize) -> G, G: FnOnce() + Send + 'static>(f: F, num_thread
 
 /// send numbers with `trailing_zeros` trailing zeros in their
 /// SHA-256 hash, and the hash itself using `num_threads` threads
-pub fn send_hashes(sender: Sender<(u64, String)>, trailing_zeros: u8, num_threads: usize) {
+pub fn send_hashes(
+    sender: Sender<(u64, String)>,
+    initial_value: u64,
+    trailing_zeros: u8,
+    num_threads: usize,
+) {
     assert!(
         trailing_zeros < 64,
         "number of trailing zeros must be less than 64"
@@ -70,9 +75,11 @@ pub fn send_hashes(sender: Sender<(u64, String)>, trailing_zeros: u8, num_thread
         |i| {
             let sender = sender.clone();
             move || {
-                for (x, hash) in
-                    Sha256TrailingZerosIterator::new(i as _, num_threads as _, trailing_zeros)
-                {
+                for (x, hash) in Sha256TrailingZerosIterator::new(
+                    initial_value + i as u64,
+                    num_threads as _,
+                    trailing_zeros,
+                ) {
                     sender.send((x, hash)).expect("failed to send");
                 }
             }
@@ -145,7 +152,7 @@ mod tests {
     #[test]
     fn test_send_hashes() {
         let (sender, receiver) = channel();
-        thread::spawn(|| send_hashes(sender, 4, 6));
+        thread::spawn(|| send_hashes(sender, 1, 4, 6));
         for (n, hash) in receiver.into_iter().take(5) {
             assert_eq!(hash, sha256_u64(n));
             assert!(hash.ends_with("0000"));
