@@ -1,0 +1,13 @@
+[package]
+name = "hash-finder-bin"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["hash-finder"]
+
+[dependencies]
+hash-finder = { path = "hash-finder" }
+clap = { version = "4.4.2", features = ["derive"] }
+digital = { git = "https://github.com/lincot/rusted-katana" }
+num_cpus = "1.16.0"

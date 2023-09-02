@@ -1,0 +1,9 @@
+[package]
+name = "hash-finder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha2 = "0.10.7"
+heapless = "0.7.16"
+digital = { git = "https://github.com/lincot/rusted-katana" }
