@@ -1,6 +1,6 @@
 # hash finder
 
-fast finder of numbers with a specified amount of leading zeros in their SHA-256 hash
+fast finder of numbers with a specified amount of trailing zeros in their SHA-256 hash
 
 ## example run
 
