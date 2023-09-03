@@ -1,6 +1,9 @@
 use digital::NumToString;
 use sha2::{Digest, Sha256};
-use std::{sync::mpsc::Sender, thread};
+use std::{
+    sync::mpsc::{SendError, Sender},
+    thread,
+};
 
 /// convert u64 to its SHA-256 hash
 fn sha256_u64(x: u64) -> String {
@@ -80,7 +83,9 @@ pub fn send_hashes(
                     num_threads as _,
                     trailing_zeros,
                 ) {
-                    sender.send((x, hash)).expect("failed to send");
+                    if let Err(SendError { .. }) = sender.send((x, hash)) {
+                        return;
+                    }
                 }
             }
         },
