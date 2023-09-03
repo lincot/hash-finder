@@ -1,6 +1,6 @@
 use clap::Parser;
 use digital::NumToString;
-use hash_finder::send_hashes;
+use hash_finder::hash_finder;
 use std::{
     io::{stdout, Write},
     sync::mpsc::channel,
@@ -18,9 +18,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let (sender, receiver) = channel::<(u64, String)>();
-    thread::spawn(move || {
-        send_hashes(sender, 1, args.trailing_zeros, num_cpus::get());
-    });
+    thread::spawn(move || hash_finder(sender, 1, args.trailing_zeros, num_cpus::get()));
 
     let mut out = stdout().lock();
     for (n, hash) in receiver.iter().take(args.num_numbers) {

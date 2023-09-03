@@ -1,9 +1,44 @@
+//! fast finder of numbers with a specified amount of trailing zeros in their SHA-256 hash
 use digital::NumToString;
 use sha2::{Digest, Sha256};
 use std::{
     sync::mpsc::{SendError, Sender},
     thread,
 };
+
+/// iterate numbers starting from `initial_value`
+/// and if their SHA-256 hash ends with `trailing_zeros` trailing zeros
+/// send them to `sender` using `num_threads` threads;
+/// the order of the numbers is not guaranteed, but they are guaranteed not to repeat
+pub fn hash_finder(
+    sender: Sender<(u64, String)>,
+    initial_value: u64,
+    trailing_zeros: u8,
+    num_threads: usize,
+) {
+    assert!(
+        trailing_zeros < 64,
+        "number of trailing zeros must be less than 64"
+    );
+
+    run_threads(
+        |i| {
+            let sender = sender.clone();
+            move || {
+                for (x, hash) in Sha256TrailingZerosIterator::new(
+                    initial_value + i as u64,
+                    num_threads as _,
+                    trailing_zeros,
+                ) {
+                    if let Err(SendError { .. }) = sender.send((x, hash)) {
+                        return;
+                    }
+                }
+            }
+        },
+        num_threads,
+    );
+}
 
 /// convert u64 to its SHA-256 hash
 fn sha256_u64(x: u64) -> String {
@@ -14,8 +49,8 @@ fn sha256_u64(x: u64) -> String {
 }
 
 /// yields numbers with `trailing_zeros` trailing zeros in their
-/// SHA-256 hash, and the hash itself
-struct Sha256TrailingZerosIterator {
+/// SHA-256 hash, and the hash itself (single-threaded)
+pub struct Sha256TrailingZerosIterator {
     current: Option<u64>,
     step: u64,
     trailing_zeros: u8,
@@ -61,41 +96,9 @@ fn run_threads<F: Fn(usize) -> G, G: FnOnce() + Send + 'static>(f: F, num_thread
     }
 }
 
-/// send numbers with `trailing_zeros` trailing zeros in their
-/// SHA-256 hash, and the hash itself using `num_threads` threads
-pub fn send_hashes(
-    sender: Sender<(u64, String)>,
-    initial_value: u64,
-    trailing_zeros: u8,
-    num_threads: usize,
-) {
-    assert!(
-        trailing_zeros < 64,
-        "number of trailing zeros must be less than 64"
-    );
-
-    run_threads(
-        |i| {
-            let sender = sender.clone();
-            move || {
-                for (x, hash) in Sha256TrailingZerosIterator::new(
-                    initial_value + i as u64,
-                    num_threads as _,
-                    trailing_zeros,
-                ) {
-                    if let Err(SendError { .. }) = sender.send((x, hash)) {
-                        return;
-                    }
-                }
-            }
-        },
-        num_threads,
-    );
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{run_threads, send_hashes, sha256_u64, Sha256TrailingZerosIterator};
+    use crate::{hash_finder, run_threads, sha256_u64, Sha256TrailingZerosIterator};
     use core::sync::atomic::{AtomicU8, Ordering};
     use std::{
         sync::{mpsc::channel, Arc},
@@ -155,9 +158,9 @@ mod tests {
     }
 
     #[test]
-    fn test_send_hashes() {
+    fn test_hash_finder() {
         let (sender, receiver) = channel();
-        thread::spawn(|| send_hashes(sender, 1, 4, 6));
+        thread::spawn(|| hash_finder(sender, 1, 4, 6));
         for (n, hash) in receiver.into_iter().take(5) {
             assert_eq!(hash, sha256_u64(n));
             assert!(hash.ends_with("0000"));
