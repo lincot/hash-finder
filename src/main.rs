@@ -22,8 +22,8 @@ fn main() {
         send_hashes(sender, 1, args.trailing_zeros, num_cpus::get());
     });
 
+    let mut out = stdout().lock();
     for (n, hash) in receiver.iter().take(args.num_numbers) {
-        let mut out = stdout();
         out.write_all(n.to_heapless_string(false, false).as_bytes())
             .expect("failed to write to stdout");
         out.write_all(b", \"").expect("failed to write to stdout");
