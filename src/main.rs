@@ -13,12 +13,15 @@ struct Args {
     trailing_zeros: u8,
     #[arg(short = 'F')]
     num_numbers: usize,
+    #[arg(long = "num-threads")]
+    num_threads: Option<usize>,
 }
 
 fn main() {
     let args = Args::parse();
-    let (sender, receiver) = channel::<(u64, String)>();
-    thread::spawn(move || hash_finder(sender, 1, args.trailing_zeros, num_cpus::get()));
+    let num_threads = args.num_threads.unwrap_or_else(num_cpus::get);
+    let (sender, receiver) = channel();
+    thread::spawn(move || hash_finder(sender, 1, args.trailing_zeros, num_threads));
 
     let mut out = stdout().lock();
     for (n, hash) in receiver.iter().take(args.num_numbers) {
