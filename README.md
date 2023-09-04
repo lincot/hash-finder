@@ -2,6 +2,18 @@
 
 fast finder of numbers with a specified amount of trailing zeros in their SHA-256 hash
 
+## usage
+
+```
+Usage: hash-finder-bin [OPTIONS] -N <TRAILING_ZEROS> -F <NUM_NUMBERS>
+
+Options:
+  -N <TRAILING_ZEROS>
+  -F <NUM_NUMBERS>
+      --num-threads <NUM_THREADS>
+  -h, --help                       Print help
+```
+
 ## example run
 
 ```sh
