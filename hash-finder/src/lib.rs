@@ -2,41 +2,54 @@
 use digital::NumToString;
 use sha2::{Digest, Sha256};
 use std::{
-    sync::mpsc::{SendError, Sender},
+    sync::{
+        atomic::{AtomicIsize, Ordering},
+        mpsc::Sender,
+        Arc,
+    },
     thread,
 };
 
 /// iterate numbers starting from `initial_value`
 /// and if their SHA-256 hash ends with `trailing_zeros` trailing zeros
-/// send them to `sender` using `num_threads` threads;
-/// the order of the numbers is not guaranteed, but they are guaranteed not to repeat
+/// send them and their hash to `sender` using `num_threads` threads;
+/// the order of the numbers is not guaranteed, but they are guaranteed not to repeat;
+/// a total of `num_numbers` values are sent
 pub fn hash_finder(
     sender: Sender<(u64, String)>,
     initial_value: u64,
     trailing_zeros: u8,
     num_threads: usize,
+    num_numbers: isize,
 ) {
     assert!(
         trailing_zeros < 64,
         "number of trailing zeros must be less than 64"
     );
 
+    let counter = Arc::new(AtomicIsize::from(num_numbers));
+
     run_threads(
         |i| {
             let sender = sender.clone();
+            let counter = counter.clone();
             move || {
                 for (x, hash) in Sha256TrailingZerosIterator::new(
                     initial_value + i as u64,
                     num_threads as _,
                     trailing_zeros,
+                    counter,
                 ) {
-                    if let Err(SendError { .. }) = sender.send((x, hash)) {
-                        return;
-                    }
+                    sender.send((x, hash)).expect("failed to send");
                 }
             }
         },
         num_threads,
+    );
+
+    assert!(
+        counter.load(Ordering::SeqCst) <= 0,
+        "failed to find enough numbers"
     );
 }
 
@@ -49,19 +62,21 @@ fn sha256_u64(x: u64) -> String {
 }
 
 /// yields numbers with `trailing_zeros` trailing zeros in their
-/// SHA-256 hash, and the hash itself (single-threaded)
+/// SHA-256 hash, and the hash itself while `counter` is positive
 pub struct Sha256TrailingZerosIterator {
     current: Option<u64>,
     step: u64,
     trailing_zeros: u8,
+    counter: Arc<AtomicIsize>,
 }
 
 impl Sha256TrailingZerosIterator {
-    fn new(initial_value: u64, step: u64, trailing_zeros: u8) -> Self {
+    fn new(initial_value: u64, step: u64, trailing_zeros: u8, counter: Arc<AtomicIsize>) -> Self {
         Self {
             current: Some(initial_value),
             step,
             trailing_zeros,
+            counter,
         }
     }
 }
@@ -71,6 +86,9 @@ impl Iterator for Sha256TrailingZerosIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
+            if self.counter.load(Ordering::SeqCst) <= 0 {
+                return None;
+            }
             let current = self.current?;
             self.current = current.checked_add(self.step);
             let hash = sha256_u64(current);
@@ -78,7 +96,11 @@ impl Iterator for Sha256TrailingZerosIterator {
                 .iter()
                 .all(|&x| x == b'0')
             {
-                return Some((current, hash));
+                if self.counter.fetch_sub(1, Ordering::SeqCst) > 0 {
+                    return Some((current, hash));
+                } else {
+                    return None;
+                }
             }
         }
     }
@@ -123,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_trailing_zeros_iterator() {
-        let mut it = Sha256TrailingZerosIterator::new(0, 2, 4);
+        let mut it = Sha256TrailingZerosIterator::new(0, 2, 4, Arc::new(2.into()));
         assert_eq!(
             it.next(),
             Some((
@@ -138,7 +160,7 @@ mod tests {
                 "4ff6b83cd5d3afa354d1ae9cf8923e9cf6caa199cc3b74ee3c53b47da1c20000".into()
             ))
         );
-        assert!(it.next().is_some());
+        assert!(it.next().is_none());
     }
 
     #[test]
@@ -160,8 +182,8 @@ mod tests {
     #[test]
     fn test_hash_finder() {
         let (sender, receiver) = channel();
-        thread::spawn(|| hash_finder(sender, 1, 4, 6));
-        for (n, hash) in receiver.into_iter().take(5) {
+        thread::spawn(|| hash_finder(sender, 1, 4, 6, 5));
+        for (n, hash) in receiver {
             assert_eq!(hash, sha256_u64(n));
             assert!(hash.ends_with("0000"));
         }
