@@ -109,6 +109,10 @@ impl Iterator for Sha256TrailingZerosIterator {
 /// run `num_threads` threads that execute functions that `f` yields;
 /// `f` takes the index of the current thread
 fn run_threads<F: Fn(usize) -> G, G: FnOnce() + Send + 'static>(f: F, num_threads: usize) {
+    if num_threads == 1 {
+        return f(0)();
+    }
+
     let mut handles = Vec::with_capacity(num_threads);
     for i in 0..num_threads {
         handles.push(thread::spawn(f(i)));
